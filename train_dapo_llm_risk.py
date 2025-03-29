@@ -64,7 +64,10 @@ train['llm_risk'].fillna(3, inplace=True)  # neutral risk score is 3
 
 # Set up trading environment parameters
 stock_dimension = len(train.tic.unique())
-state_space = 1 + 3*stock_dimension + len(INDICATORS)*stock_dimension
+# Calculate state space to match environment dimensions
+# Based on analysis of env_stocktrading_llm_risk.py, the state contains:
+# 1 (cash) + stock_dimension (prices) + stock_dimension (shares) + tech_indicators*stock_dimension + sentiment*stock_dimension + risk*stock_dimension
+state_space = 1 + (2 + len(INDICATORS) + 2) * stock_dimension  # Fine-tuned to match actual state dimensions
 print(f"Stock Dimension: {stock_dimension}, State Space: {state_space}")
 
 buy_cost_list = sell_cost_list = [0.001] * stock_dimension

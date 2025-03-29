@@ -877,7 +877,10 @@ def main():
     
     # Configure environment
     stock_dimension = len(trade_llm_risk.tic.unique())
-    state_space_llm_risk = 1 + 2 * stock_dimension + (2+len(INDICATORS)) * stock_dimension
+    # Calculate state space according to DAPOInferenceEnv state structure:
+    # 1(cash) + stock_dimension(prices) + stock_dimension(holdings) + stock_dimension(tradable_flags) + 
+    # len(INDICATORS)*stock_dimension(tech indicators) + stock_dimension(sentiment) + stock_dimension(risk)
+    state_space_llm_risk = 1 + (3 + len(INDICATORS) + 2) * stock_dimension
     
     print(f"Stock Dimension: {stock_dimension}, State Space: {state_space_llm_risk}")
     
