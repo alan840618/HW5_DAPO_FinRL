@@ -15,7 +15,17 @@ matplotlib.use("Agg")
 
 
 class DAPOInferenceEnv(gym.Env):
-    """A custom environment for DAPO inference with LLM risk and sentiment features"""
+    """A custom environment for DAPO inference with LLM risk and sentiment features
+    
+    State Space Structure:
+    1. Cash balance [1 value]
+    2. Current stock prices [stock_dimension values]
+    3. Current holdings [stock_dimension values]
+    4. Tradable flags [stock_dimension values]
+    5. Technical indicators [len(tech_indicator_list)*stock_dimension values]
+    6. LLM sentiment scores [stock_dimension values]
+    7. LLM risk scores [stock_dimension values]
+    """
 
     metadata = {"render.modes": ["human"]}
 
@@ -164,6 +174,7 @@ class DAPOInferenceEnv(gym.Env):
     def _buy_stock(self, index, action):
         """Execute a buy stock action"""
         def _do_buy():
+            # Updated index for tradable flag  
             if self.state[index + 2 * self.stock_dim + 1] != True:  # Check if stock is tradable
                 # Calculate available amount considering trading costs
                 available_amount = self.state[0] // (
@@ -451,6 +462,7 @@ class DAPOInferenceEnv(gym.Env):
                     [self.initial_amount]  # Cash
                     + self.data.close.values.tolist()  # Current prices
                     + self.num_stock_shares  # Current holdings
+                    + [False] * self.stock_dim  # Tradable flags (all tradable by default)
                     + sum((self.data[tech].values.tolist() for tech in self.tech_indicator_list), [])  # Technical indicators
                     + self.data[self.llm_sentiment_col].values.tolist()  # LLM sentiment
                     + self.data[self.llm_risk_col].values.tolist()  # LLM risk
@@ -460,7 +472,8 @@ class DAPOInferenceEnv(gym.Env):
                 state = (
                     [self.initial_amount]  # Cash
                     + [self.data.close]  # Current price
-                    + [0] * self.stock_dim  # Current holdings (initially 0)
+                    + [self.num_stock_shares[0]]  # Current holding (single value)
+                    + [False]  # Tradable flag (tradable by default)
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])  # Technical indicators
                     + [self.data[self.llm_sentiment_col]]  # LLM sentiment
                     + [self.data[self.llm_risk_col]]  # LLM risk
@@ -473,6 +486,7 @@ class DAPOInferenceEnv(gym.Env):
                     [self.previous_state[0]]  # Cash from previous state
                     + self.data.close.values.tolist()  # Current prices
                     + self.previous_state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)]  # Holdings from previous state
+                    + self.previous_state[(self.stock_dim * 2 + 1) : (self.stock_dim * 3 + 1)]  # Tradable flags from previous state
                     + sum((self.data[tech].values.tolist() for tech in self.tech_indicator_list), [])  # Technical indicators
                     + self.data[self.llm_sentiment_col].values.tolist()  # LLM sentiment
                     + self.data[self.llm_risk_col].values.tolist()  # LLM risk
@@ -482,7 +496,8 @@ class DAPOInferenceEnv(gym.Env):
                 state = (
                     [self.previous_state[0]]  # Cash from previous state
                     + [self.data.close]  # Current price
-                    + self.previous_state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)]  # Holdings from previous state
+                    + [self.previous_state[self.stock_dim + 1]]  # Holding from previous state (single value)
+                    + [self.previous_state[self.stock_dim * 2 + 1]]  # Tradable flag from previous state
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])  # Technical indicators
                     + [self.data[self.llm_sentiment_col]]  # LLM sentiment
                     + [self.data[self.llm_risk_col]]  # LLM risk
@@ -498,6 +513,7 @@ class DAPOInferenceEnv(gym.Env):
                 [self.state[0]]  # Cash
                 + self.data.close.values.tolist()  # Current prices
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])  # Current holdings
+                + list(self.state[(self.stock_dim * 2 + 1) : (self.stock_dim * 3 + 1)])  # Tradable flags
                 + sum((self.data[tech].values.tolist() for tech in self.tech_indicator_list), [])  # Technical indicators
                 + self.data[self.llm_sentiment_col].values.tolist()  # LLM sentiment
                 + self.data[self.llm_risk_col].values.tolist()  # LLM risk
@@ -507,7 +523,8 @@ class DAPOInferenceEnv(gym.Env):
             state = (
                 [self.state[0]]  # Cash
                 + [self.data.close]  # Current price
-                + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])  # Current holdings
+                + [self.state[self.stock_dim + 1]]  # Current holding (single value)
+                + [self.state[self.stock_dim * 2 + 1]]  # Tradable flag
                 + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])  # Technical indicators
                 + [self.data[self.llm_sentiment_col]]  # LLM sentiment
                 + [self.data[self.llm_risk_col]]  # LLM risk

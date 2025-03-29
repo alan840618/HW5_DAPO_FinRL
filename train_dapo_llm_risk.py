@@ -64,7 +64,7 @@ train['llm_risk'].fillna(3, inplace=True)  # neutral risk score is 3
 
 # Set up trading environment parameters
 stock_dimension = len(train.tic.unique())
-state_space = 1 + 2*stock_dimension + (2+len(INDICATORS))*stock_dimension  # add dimensions for LLM sentiment and risk
+state_space = 1 + 3*stock_dimension + len(INDICATORS)*stock_dimension
 print(f"Stock Dimension: {stock_dimension}, State Space: {state_space}")
 
 buy_cost_list = sell_cost_list = [0.001] * stock_dimension
