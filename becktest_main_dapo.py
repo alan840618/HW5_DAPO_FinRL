@@ -934,26 +934,9 @@ def main():
         print("Successfully created DAPO inference environment")
     except Exception as e:
         print(f"Error creating DAPO inference environment: {e}")
-        print("Falling back to standard environment...")
         import traceback
         traceback.print_exc()
-        
-        # Fallback to standard environment
-        e_trade_llm_risk_gym = StockTradingEnv_llm_risk(
-            df=trade_llm_risk, 
-            stock_dim=stock_dimension,
-            hmax=100,
-            initial_amount=1000000,
-            num_stock_shares=[0] * stock_dimension,
-            buy_cost_pct=[0.001] * stock_dimension,
-            sell_cost_pct=[0.001] * stock_dimension,
-            state_space=state_space_llm_risk,
-            action_space=stock_dimension,
-            tech_indicator_list=INDICATORS,
-            turbulence_threshold=70, 
-            risk_indicator_col='vix',
-            reward_scaling=1.0  # Adding the missing reward_scaling parameter
-        )
+        raise Exception("Failed to initialize DAPOInferenceEnv. Stopping execution.")
     
     # Get observation and action spaces
     observation_space_llm_risk = e_trade_llm_risk_gym.observation_space
