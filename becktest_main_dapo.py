@@ -14,14 +14,6 @@ from gymnasium.spaces import Box, Discrete
 import gym
 import seaborn as sns
 
-# Import the custom environment at the top of the file
-try:
-    from env_dapo_inference import DAPOInferenceEnv
-    print("Successfully imported DAPOInferenceEnv")
-except ImportError as e:
-    print(f"Error importing DAPOInferenceEnv: {e}")
-    print("Will attempt to use StockTradingEnv_llm_risk as fallback")
-
 # Add the directory to python path to import the modules
 # sys.path.append("/home/ruijian/FinRL_performance_impact.png (Sentiment/Risk impact over time)")
     # print("- dapo_deepseek_trading_results.csv (Performance metrics time series)")
