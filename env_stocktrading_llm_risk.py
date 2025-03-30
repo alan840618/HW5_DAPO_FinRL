@@ -445,10 +445,15 @@ class StockTradingEnv(gym.Env):
 
 #                print(' the closing vals are ' + str(self.data.close))
 
-                state = ([self.initial_amount]+ self.data.close.values.tolist()+ self.num_stock_shares+ sum(
-                        (self.data[tech].values.tolist() for tech in self.tech_indicator_list),[],)
-                    +  self.data[self.llm_sentiment_col].values.tolist()  #add llm sentiment
-                    +  self.data[self.llm_risk_col].values.tolist()  #add llm sentiment
+                state = ([self.initial_amount]+ 
+                        self.data.close.values.tolist()+ 
+                        self.num_stock_shares+ 
+                        # Add extra feature (dummy turnover) to match expected state space
+                        [0] * self.stock_dim + 
+                        sum(
+                        (self.data[tech].values.tolist() for tech in self.tech_indicator_list),[],) +
+                    self.data[self.llm_sentiment_col].values.tolist() +  #add llm sentiment
+                    self.data[self.llm_risk_col].values.tolist()  #add llm risk
                 )  # append initial stocks_share to initial state, instead of all zero
             else:
                 # for single stock
@@ -456,6 +461,7 @@ class StockTradingEnv(gym.Env):
                     [self.initial_amount]
                     + [self.data.close]
                     + [0] * self.stock_dim
+                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                     + [self.data[self.llm_sentiment_col]]
                     + [self.data[self.llm_risk_col]]
@@ -470,6 +476,7 @@ class StockTradingEnv(gym.Env):
                     + self.previous_state[
                         (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
                     ]
+                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(
                         (
                             self.data[tech].values.tolist()
@@ -486,6 +493,7 @@ class StockTradingEnv(gym.Env):
                     + self.previous_state[
                         (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
                     ]
+                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                 )
 
@@ -498,6 +506,7 @@ class StockTradingEnv(gym.Env):
                 [self.state[0]]
                 + self.data.close.values.tolist()
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                + [0] * self.stock_dim  # Add extra feature (dummy turnover) to match expected state space
                 + sum(
                     (
                         self.data[tech].values.tolist()
@@ -515,6 +524,7 @@ class StockTradingEnv(gym.Env):
                 [self.state[0]]
                 + [self.data.close]
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                 + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                 + [self.data[self.llm_sentiment_col]] #add LLM sentiment
                 + [self.data[self.llm_risk_col]] #add LLM risk
