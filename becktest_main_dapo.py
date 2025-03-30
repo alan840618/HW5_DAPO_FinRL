@@ -877,10 +877,7 @@ def main():
     
     # Configure environment
     stock_dimension = len(trade_llm_risk.tic.unique())
-    # Calculate state space according to DAPOInferenceEnv state structure:
-    # 1(cash) + stock_dimension(prices) + stock_dimension(holdings) + stock_dimension(tradable_flags) + 
-    # len(INDICATORS)*stock_dimension(tech indicators) + stock_dimension(sentiment) + stock_dimension(risk)
-    state_space_llm_risk = 1 + (3 + len(INDICATORS) + 2) * stock_dimension
+    state_space_llm_risk = 1 + 2 * stock_dimension + (2+len(INDICATORS)) * stock_dimension
     
     print(f"Stock Dimension: {stock_dimension}, State Space: {state_space_llm_risk}")
     
@@ -910,7 +907,29 @@ def main():
         print(f"  - Action space: {stock_dimension}")
         print(f"  - Technical indicators: {INDICATORS}")
         
-        e_trade_llm_risk_gym = DAPOInferenceEnv(
+        # e_trade_llm_risk_gym = DAPOInferenceEnv(
+        #     df=trade_llm_risk, 
+        #     stock_dim=stock_dimension,
+        #     hmax=100,
+        #     initial_amount=1000000,
+        #     num_stock_shares=[0] * stock_dimension,
+        #     buy_cost_pct=[0.001] * stock_dimension,
+        #     sell_cost_pct=[0.001] * stock_dimension,
+        #     state_space=state_space_llm_risk,
+        #     action_space=stock_dimension,
+        #     tech_indicator_list=INDICATORS,
+        #     turbulence_threshold=70, 
+        #     risk_indicator_col='vix',
+        #     llm_sentiment_col='llm_sentiment',
+        #     llm_risk_col='llm_risk',
+        #     reward_scaling=1.0,  # Adding the missing reward_scaling parameter
+        #     make_plots=True,
+        #     print_verbosity=10,
+        #     model_name="dapo_deepseek",
+        #     mode="backtest"
+        # )
+
+        e_trade_llm_risk_gym = StockTradingEnv_llm_risk(
             df=trade_llm_risk, 
             stock_dim=stock_dimension,
             hmax=100,
@@ -923,20 +942,31 @@ def main():
             tech_indicator_list=INDICATORS,
             turbulence_threshold=70, 
             risk_indicator_col='vix',
-            llm_sentiment_col='llm_sentiment',
-            llm_risk_col='llm_risk',
-            reward_scaling=1.0,  # Adding the missing reward_scaling parameter
-            make_plots=True,
-            print_verbosity=10,
-            model_name="dapo_deepseek",
-            mode="backtest"
+            reward_scaling=1.0  # Adding the missing reward_scaling parameter
         )
         print("Successfully created DAPO inference environment")
     except Exception as e:
         print(f"Error creating DAPO inference environment: {e}")
+        print("Falling back to standard environment...")
         import traceback
         traceback.print_exc()
-        raise Exception("Failed to initialize DAPOInferenceEnv. Stopping execution.")
+        
+        # Fallback to standard environment
+        e_trade_llm_risk_gym = StockTradingEnv_llm_risk(
+            df=trade_llm_risk, 
+            stock_dim=stock_dimension,
+            hmax=100,
+            initial_amount=1000000,
+            num_stock_shares=[0] * stock_dimension,
+            buy_cost_pct=[0.001] * stock_dimension,
+            sell_cost_pct=[0.001] * stock_dimension,
+            state_space=state_space_llm_risk,
+            action_space=stock_dimension,
+            tech_indicator_list=INDICATORS,
+            turbulence_threshold=70, 
+            risk_indicator_col='vix',
+            reward_scaling=1.0  # Adding the missing reward_scaling parameter
+        )
     
     # Get observation and action spaces
     observation_space_llm_risk = e_trade_llm_risk_gym.observation_space

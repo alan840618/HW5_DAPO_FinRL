@@ -6,7 +6,7 @@ from datasets import load_dataset
 import pandas as pd
 from finrl.config import INDICATORS, TRAINED_MODEL_DIR, RESULTS_DIR
 from finrl.main import check_and_make_directories
-from env_dapo_inference import DAPOInferenceEnv
+from env_stocktrading_llm_risk import StockTradingEnv
 import os
 import numpy as np
 import torch
@@ -59,13 +59,12 @@ train['new_idx'] = train['date'].map(date_to_idx)
 train = train.set_index('new_idx')
 
 # Fill missing values for both risk and sentiment
-train['llm_sentiment'] = train['llm_sentiment'].fillna(3)  # neutral sentiment score is 3
-train['llm_risk'] = train['llm_risk'].fillna(3)  # neutral risk score is 3
+train['llm_sentiment'].fillna(3, inplace=True)  # neutral sentiment score is 3
+train['llm_risk'].fillna(3, inplace=True)  # neutral risk score is 3
 
 # Set up trading environment parameters
 stock_dimension = len(train.tic.unique())
-# Actual state structure in the environment: [cash(1)] + [prices(stock_dim)] + [shares(stock_dim)] + [dummy(stock_dim)] + [indicators(stock_dim*len(INDICATORS))] + [sentiment(stock_dim)] + [risk(stock_dim)]
-state_space = 1 + (3 + len(INDICATORS) + 2) * stock_dimension
+state_space = 1 + 2*stock_dimension + (2+len(INDICATORS))*stock_dimension  # add dimensions for LLM sentiment and risk
 print(f"Stock Dimension: {stock_dimension}, State Space: {state_space}")
 
 buy_cost_list = sell_cost_list = [0.001] * stock_dimension
@@ -85,7 +84,7 @@ env_kwargs = {
 }
 
 # Create trading environment
-e_train_gym = DAPOInferenceEnv(df=train, **env_kwargs)
+e_train_gym = StockTradingEnv(df=train, **env_kwargs)
 env_train, _ = e_train_gym.get_sb_env()
 
 if __name__ == "__main__":
