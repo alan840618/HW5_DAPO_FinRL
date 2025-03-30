@@ -224,7 +224,7 @@ class StockTradingEnv(gym.Env):
     def step(self, actions):
         self.terminal = self.day >= len(self.df.index.unique()) - 1
         if self.terminal:
-            # print(f"Episode: {self.episode}")
+            # Terminal state handling
             if self.make_plots:
                 self._make_plot()
             end_total_asset = self.state[0] + sum(
@@ -241,21 +241,23 @@ class StockTradingEnv(gym.Env):
                     )
                 )
                 - self.asset_memory[0]
-            )  # initial_amount is only cash part of our initial asset
+            )
             df_total_value.columns = ["account_value"]
             df_total_value["date"] = self.date_memory
-            df_total_value["daily_return"] = df_total_value["account_value"].pct_change(
-                1
-            )
+            df_total_value["daily_return"] = df_total_value["account_value"].pct_change(1)
+            
+            sharpe = 0
             if df_total_value["daily_return"].std() != 0:
                 sharpe = (
                     (252**0.5)
                     * df_total_value["daily_return"].mean()
                     / df_total_value["daily_return"].std()
                 )
+            
             df_rewards = pd.DataFrame(self.rewards_memory)
             df_rewards.columns = ["account_rewards"]
             df_rewards["date"] = self.date_memory[:-1]
+            
             if self.episode % self.print_verbosity == 0:
                 print(f"day: {self.day}, episode: {self.episode}")
                 print(f"begin_total_asset: {self.asset_memory[0]:0.2f}")
@@ -294,102 +296,160 @@ class StockTradingEnv(gym.Env):
                 )
                 plt.close()
 
-            # Add outputs to logger interface
-            # logger.record("environment/portfolio_value", end_total_asset)
-            # logger.record("environment/total_reward", tot_reward)
-            # logger.record("environment/total_reward_pct", (tot_reward / (end_total_asset - tot_reward)) * 100)
-            # logger.record("environment/total_cost", self.cost)
-            # logger.record("environment/total_trades", self.trades)
-
             return self.state, self.reward, self.terminal, False, {}
 
         else:
-            # Apply LLM sentiment to influence actions
-            #llm_sentiments = self.data[self.llm_sentiment_col].values  # Get LLM sentiment for all stocks
-            #actions = np.where(llm_sentiments > 0, actions, 0)  # Example: Only execute actions where sentiment > 0
-        #RESUME HERE
+            # Handle the current trading day
+            try:
+                # Safely get LLM sentiments and risks with proper error handling
+                if len(self.df.tic.unique()) > 1:
+                    # For multiple stocks
+                    llm_sentiments = np.array(self.data[self.llm_sentiment_col].values)
+                    llm_risks = np.array(self.data[self.llm_risk_col].values)
+                else:
+                    # For single stock - convert to array to maintain consistent shape
+                    llm_sentiments = np.array([self.data[self.llm_sentiment_col]])
+                    llm_risks = np.array([self.data[self.llm_risk_col]])
+                
+                # Convert actions to numpy array if not already
+                actions = np.array(actions).flatten()
+                
+                # Ensure actions and sentiment/risk arrays match in length
+                if len(llm_sentiments) != len(actions):
+                    print(f"Warning: Sentiment array length ({len(llm_sentiments)}) doesn't match actions length ({len(actions)})")
+                    # Adjust to smaller size for safety
+                    min_len = min(len(llm_sentiments), len(actions))
+                    llm_sentiments = llm_sentiments[:min_len]
+                    llm_risks = llm_risks[:min_len]
+                    actions = actions[:min_len]
+                    
+                    # If we need to extend sentiment/risk arrays:
+                    if len(llm_sentiments) < len(actions):
+                        llm_sentiments = np.pad(llm_sentiments, (0, len(actions) - len(llm_sentiments)), 'constant', constant_values=3)
+                        llm_risks = np.pad(llm_risks, (0, len(actions) - len(llm_risks)), 'constant', constant_values=3)
+                
+                # Create masks for action types
+                buy_mask = (actions > 0)
+                sell_mask = (actions < 0)
 
-#            print("actions before: " + str(actions))
-            # Fetch LLM sentiments for the current day
-            llm_sentiments = self.data[self.llm_sentiment_col].values  # values: [1, 2, 3, 4, 5]
-#            llm_risks = self.data[self.llm_risk_col].values  # values: [1, 2, 3, 4, 5]
+                # Create masks based on LLM sentiments
+                strong_sell_mask = np.zeros_like(actions, dtype=bool)
+                moderate_sell_mask = np.zeros_like(actions, dtype=bool)
+                hold_mask = np.zeros_like(actions, dtype=bool)
+                moderate_buy_mask = np.zeros_like(actions, dtype=bool)
+                strong_buy_mask = np.zeros_like(actions, dtype=bool)
+                
+                # Fill in masks safely (ensuring bounds are respected)
+                for i in range(min(len(llm_sentiments), len(actions))):
+                    if i < len(llm_sentiments):
+                        sentiment = llm_sentiments[i]
+                        if sentiment == 1:
+                            strong_sell_mask[i] = True
+                        elif sentiment == 2:
+                            moderate_sell_mask[i] = True
+                        elif sentiment == 3:
+                            hold_mask[i] = True
+                        elif sentiment == 4:
+                            moderate_buy_mask[i] = True
+                        elif sentiment == 5:
+                            strong_buy_mask[i] = True
 
-            # Create masks for action types
-            buy_mask = (actions > 0)
-            sell_mask = (actions < 0)
+                # Adjust actions based on combined conditions (safely)
+                # Reduce mismatched strong actions
+                for i in range(len(actions)):
+                    if (strong_sell_mask[i] and buy_mask[i]) or (strong_buy_mask[i] and sell_mask[i]):
+                        actions[i] *= 0.9
+                    # Reduce mismatched moderate actions
+                    elif (moderate_sell_mask[i] and buy_mask[i]) or (moderate_buy_mask[i] and sell_mask[i]):
+                        actions[i] *= 0.95
+                    # Amplify matched strong actions
+                    elif (strong_sell_mask[i] and sell_mask[i]) or (strong_buy_mask[i] and buy_mask[i]):
+                        actions[i] *= 1.1
+                    # Amplify matched moderate actions
+                    elif (moderate_sell_mask[i] and sell_mask[i]) or (moderate_buy_mask[i] and buy_mask[i]):
+                        actions[i] *= 1.05
 
-            # Create masks based on LLM sentiments
-            strong_sell_mask = (llm_sentiments == 1)
-            moderate_sell_mask = (llm_sentiments == 2)
-            hold_mask = (llm_sentiments == 3)
-            moderate_buy_mask = (llm_sentiments == 4)
-            strong_buy_mask = (llm_sentiments == 5)
+                # Scale actions according to hmax
+                actions = actions * self.hmax
+                actions = actions.astype(int)
+                
+                # Handle turbulence
+                if self.turbulence_threshold is not None:
+                    if self.turbulence >= self.turbulence_threshold:
+                        actions = np.array([-self.hmax] * self.stock_dim)
+                
+                # Get current total asset value
+                begin_total_asset = self.state[0] + sum(
+                    np.array(self.state[1 : (self.stock_dim + 1)])
+                    * np.array(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                )
 
-            # Adjust actions based on combined conditions
-            actions[(strong_sell_mask & buy_mask) | (strong_buy_mask & sell_mask)] *= 0.9  # Reduce mismatched strong actions
-            actions[(moderate_sell_mask & buy_mask) | (moderate_buy_mask & sell_mask)] *= 0.95  # Reduce mismatched moderate actions
-#            actions[hold_mask] *= 0.98  # Reduce all actions for neutral sentiment
+                # Sort actions for processing sell orders first
+                argsort_actions = np.argsort(actions)
+                sell_index = argsort_actions[: np.where(actions < 0)[0].shape[0]]
+                buy_index = argsort_actions[::-1][: np.where(actions > 0)[0].shape[0]]
 
+                # Process sell actions
+                for index in sell_index:
+                    if index < self.stock_dim:  # Safety check to prevent index errors
+                        actions[index] = self._sell_stock(index, actions[index]) * (-1)
 
-            actions[(strong_sell_mask & sell_mask) | (strong_buy_mask & buy_mask)] *= 1.1  # Amplify match>
-            actions[(moderate_sell_mask & sell_mask) | (moderate_buy_mask & buy_mask)] *= 1.05  # Amplify >
- #           print("actions after: " + str(actions))
- #           print("actions after: " + str(actions))
+                # Process buy actions
+                for index in buy_index:
+                    if index < self.stock_dim:  # Safety check to prevent index errors
+                        actions[index] = self._buy_stock(index, actions[index])
 
-            actions = actions * self.hmax  # actions initially is scaled between 0 to 1
-            actions = actions.astype(
-                int
-            )  # convert into integer because we can't by fraction of shares
-            if self.turbulence_threshold is not None:
-                if self.turbulence >= self.turbulence_threshold:
-                    actions = np.array([-self.hmax] * self.stock_dim)
-            begin_total_asset = self.state[0] + sum(
-                np.array(self.state[1 : (self.stock_dim + 1)])
-                * np.array(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
-            )
-            # print("begin_total_asset:{}".format(begin_total_asset))
+                self.actions_memory.append(actions)
 
-            argsort_actions = np.argsort(actions)
-            sell_index = argsort_actions[: np.where(actions < 0)[0].shape[0]]
-            buy_index = argsort_actions[::-1][: np.where(actions > 0)[0].shape[0]]
+                # Update state
+                self.day += 1
+                if self.day >= len(self.df.index.unique()):
+                    # Edge case: reached end of data
+                    self.terminal = True
+                    return self.state, self.reward, self.terminal, False, {}
+                    
+                self.data = self.df.loc[self.day, :]
+                
+                # Update turbulence if needed
+                if self.turbulence_threshold is not None:
+                    try:
+                        if len(self.df.tic.unique()) == 1:
+                            self.turbulence = self.data[self.risk_indicator_col]
+                        elif len(self.df.tic.unique()) > 1:
+                            if self.risk_indicator_col in self.data.columns:
+                                self.turbulence = self.data[self.risk_indicator_col].values[0]
+                            else:
+                                # Default to no turbulence if column not found
+                                self.turbulence = 0
+                    except Exception as e:
+                        print(f"Error updating turbulence: {e}")
+                        self.turbulence = 0
+                
+                # Update state
+                self.state = self._update_state()
 
-            for index in sell_index:
-                # print(f"Num shares before: {self.state[index+self.stock_dim+1]}")
-                # print(f'take sell action before : {actions[index]}')
-                actions[index] = self._sell_stock(index, actions[index]) * (-1)
-                # print(f'take sell action after : {actions[index]}')
-                # print(f"Num shares after: {self.state[index+self.stock_dim+1]}")
+                # Calculate reward
+                end_total_asset = self.state[0] + sum(
+                    np.array(self.state[1 : (self.stock_dim + 1)])
+                    * np.array(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
+                )
+                self.asset_memory.append(end_total_asset)
+                self.date_memory.append(self._get_date())
+                self.reward = end_total_asset - begin_total_asset
+                self.rewards_memory.append(self.reward)
+                self.reward = self.reward * self.reward_scaling
+                self.state_memory.append(self.state)
 
-            for index in buy_index:
-                # print('take buy action: {}'.format(actions[index]))
-                actions[index] = self._buy_stock(index, actions[index])
-
-            self.actions_memory.append(actions)
-
-            # state: s -> s+1
-            self.day += 1
-            self.data = self.df.loc[self.day, :]
-            if self.turbulence_threshold is not None:
-                if len(self.df.tic.unique()) == 1:
-                    self.turbulence = self.data[self.risk_indicator_col]
-                elif len(self.df.tic.unique()) > 1:
-                    self.turbulence = self.data[self.risk_indicator_col].values[0]
-            self.state = self._update_state()
-
-            end_total_asset = self.state[0] + sum(
-                np.array(self.state[1 : (self.stock_dim + 1)])
-                * np.array(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
-            )
-            self.asset_memory.append(end_total_asset)
-            self.date_memory.append(self._get_date())
-            self.reward = end_total_asset - begin_total_asset
-            self.rewards_memory.append(self.reward)
-            self.reward = self.reward * self.reward_scaling
-            self.state_memory.append(
-                self.state
-            )  # add current state in state_recorder for each step
-
-        return self.state, self.reward, self.terminal, False, {}
+                return self.state, self.reward, self.terminal, False, {}
+                
+            except Exception as e:
+                print(f"Error in step method: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # Return current state with no changes as fallback
+                # Prevent termination to allow debugging
+                return self.state, 0, False, False, {"error": str(e)}
 
     def reset(
         self,
@@ -445,15 +505,10 @@ class StockTradingEnv(gym.Env):
 
 #                print(' the closing vals are ' + str(self.data.close))
 
-                state = ([self.initial_amount]+ 
-                        self.data.close.values.tolist()+ 
-                        self.num_stock_shares+ 
-                        # Add extra feature (dummy turnover) to match expected state space
-                        [0] * self.stock_dim + 
-                        sum(
-                        (self.data[tech].values.tolist() for tech in self.tech_indicator_list),[],) +
-                    self.data[self.llm_sentiment_col].values.tolist() +  #add llm sentiment
-                    self.data[self.llm_risk_col].values.tolist()  #add llm risk
+                state = ([self.initial_amount]+ self.data.close.values.tolist()+ self.num_stock_shares+ sum(
+                        (self.data[tech].values.tolist() for tech in self.tech_indicator_list),[],)
+                    +  self.data[self.llm_sentiment_col].values.tolist()  #add llm sentiment
+                    +  self.data[self.llm_risk_col].values.tolist()  #add llm sentiment
                 )  # append initial stocks_share to initial state, instead of all zero
             else:
                 # for single stock
@@ -461,7 +516,6 @@ class StockTradingEnv(gym.Env):
                     [self.initial_amount]
                     + [self.data.close]
                     + [0] * self.stock_dim
-                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                     + [self.data[self.llm_sentiment_col]]
                     + [self.data[self.llm_risk_col]]
@@ -476,7 +530,6 @@ class StockTradingEnv(gym.Env):
                     + self.previous_state[
                         (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
                     ]
-                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(
                         (
                             self.data[tech].values.tolist()
@@ -493,7 +546,6 @@ class StockTradingEnv(gym.Env):
                     + self.previous_state[
                         (self.stock_dim + 1) : (self.stock_dim * 2 + 1)
                     ]
-                    + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                     + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                 )
 
@@ -506,7 +558,6 @@ class StockTradingEnv(gym.Env):
                 [self.state[0]]
                 + self.data.close.values.tolist()
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
-                + [0] * self.stock_dim  # Add extra feature (dummy turnover) to match expected state space
                 + sum(
                     (
                         self.data[tech].values.tolist()
@@ -524,7 +575,6 @@ class StockTradingEnv(gym.Env):
                 [self.state[0]]
                 + [self.data.close]
                 + list(self.state[(self.stock_dim + 1) : (self.stock_dim * 2 + 1)])
-                + [0] * self.stock_dim  # Add extra feature (dummy turnover)
                 + sum(([self.data[tech]] for tech in self.tech_indicator_list), [])
                 + [self.data[self.llm_sentiment_col]] #add LLM sentiment
                 + [self.data[self.llm_risk_col]] #add LLM risk
