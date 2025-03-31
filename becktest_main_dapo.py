@@ -34,7 +34,7 @@ from env_stocktrading_llm_risk import StockTradingEnv as StockTradingEnv_llm_ris
 MODEL_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/checkpoint/agent_dapo_deepseek_gpu_final.pth"
 RISK_DATA_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/dataset/trade_data_deepseek_risk_2019_2023.csv"
 SENTIMENT_DATA_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/dataset/trade_data_deepseek_sentiment_2019_2023.csv"
-TRADE_START_DATE = '2019-01-01'
+TRADE_START_DATE = '2020-01-01'
 TRADE_END_DATE = '2023-12-31'
 
 # Check if CUDA is available and set device
@@ -460,6 +460,7 @@ def enhanced_DRL_prediction(act, environment, verbose=True):
                 print(f"Error saving raw results: {e}")
         
         return episode_total_assets, date_memory, actions_memory, portfolio_distribution
+        
     except Exception as e:
         if verbose:
             print(f"Error in enhanced_DRL_prediction: {e}")
@@ -485,6 +486,13 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         
         plt.figure(figsize=(16, 8))
         
+        # Initialize variables
+        benchmark_returns = None
+        outperformance_frequency = np.nan
+        outperformance_down_frequency = np.nan
+        information_ratio = np.nan
+        rachev_ratio = np.nan
+        
         # Store original dates length for debugging
         original_dates_len = len(dates)
         original_assets_len = len(assets[1:])
@@ -496,10 +504,10 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
             if len(dates) > len(assets[1:]):
                 dates = dates[:len(assets[1:])]
                 print("Truncated dates to match assets length")
-            # Option 2: If assets are longer, truncate assets (less common)
+            # Option 2: If assets are longer, truncate assets
             elif len(assets[1:]) > len(dates):
                 assets = [assets[0]] + assets[1:len(dates)+1]
-                print("Truncated assets to match assets length")
+                print("Truncated assets to match dates length")
         
         # Convert to pandas Series for easier handling
         try:
@@ -509,7 +517,7 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
                 # Check for NaT values
                 if pd.isna(dates).any():
                     print("Warning: Some dates couldn't be converted to datetime. Using integer indices instead.")
-                    dates = pd.date_range(start='2019-01-01', periods=len(assets[1:]))
+                    dates = pd.date_range(start='2020-01-01', periods=len(assets[1:]))
             
             portfolio_series = pd.Series(assets[1:], index=dates)
             print(f"Created portfolio series with {len(portfolio_series)} points")
@@ -554,6 +562,82 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
             cvar = daily_returns[daily_returns <= var].mean() * 100 if len(daily_returns[daily_returns <= var]) > 0 else 0
             
             print(f"Calculated performance metrics: Total Return={total_return:.2f}%, Annual Return={annual_return:.2f}%, Sharpe={sharpe_ratio:.2f}")
+
+            # Calculate Rachev Ratio
+            alpha = 0.05  # 5% confidence level
+            if len(daily_returns) > 20:  # Need enough data points
+                # Calculate the upper and lower tails
+                upper_tail = daily_returns[daily_returns >= np.percentile(daily_returns, (1-alpha)*100)]
+                lower_tail = daily_returns[daily_returns <= np.percentile(daily_returns, alpha*100)]
+                
+                # Calculate expected returns in these tails
+                upper_tail_mean = upper_tail.mean()
+                lower_tail_mean = abs(lower_tail.mean())  # Take absolute value for denominator
+                
+                # Calculate Rachev Ratio
+                rachev_ratio = upper_tail_mean / lower_tail_mean if lower_tail_mean != 0 else np.nan
+            else:
+                rachev_ratio = np.nan
+
+            # Process benchmark if provided
+            if benchmark is not None:
+                try:
+                    print("Processing benchmark data...")
+                    benchmark_values, benchmark_name = benchmark
+                    
+                    # Ensure benchmark values match the length of dates
+                    if len(benchmark_values) != len(dates):
+                        print(f"Warning: Benchmark length ({len(benchmark_values)}) doesn't match dates length ({len(dates)})")
+                        # Find minimum length
+                        min_len = min(len(benchmark_values), len(dates))
+                        # Truncate both series to minimum length
+                        dates = dates[:min_len]
+                        benchmark_values = benchmark_values[:min_len]
+                        cumulative_returns = cumulative_returns.iloc[:min_len]
+                        print("Truncated all series to minimum length")
+                    
+                    # Calculate benchmark returns
+                    benchmark_series = pd.Series(benchmark_values, index=dates)
+                    benchmark_returns = (benchmark_series / benchmark_series.iloc[0] - 1) * 100
+                    
+                    # Calculate benchmark daily returns
+                    benchmark_daily_returns = benchmark_series.pct_change().dropna()
+                    
+                    # Ensure both return series have the same index
+                    common_dates = daily_returns.index.intersection(benchmark_daily_returns.index)
+                    if len(common_dates) > 0:
+                        aligned_strategy_returns = daily_returns[common_dates]
+                        aligned_benchmark_returns = benchmark_daily_returns[common_dates]
+                        
+                        # Calculate Information Ratio
+                        excess_returns = aligned_strategy_returns - aligned_benchmark_returns
+                        if len(excess_returns) > 0 and excess_returns.std() != 0:
+                            information_ratio = np.sqrt(252) * excess_returns.mean() / excess_returns.std()
+                            print(f"Calculated Information Ratio: {information_ratio:.2f}")
+                        
+                        # Calculate outperformance frequencies
+                        outperformance_count = (aligned_strategy_returns > aligned_benchmark_returns).sum()
+                        total_periods = len(aligned_strategy_returns)
+                        outperformance_frequency = (outperformance_count / total_periods) * 100
+                        print(f"Calculated Outperformance Frequency: {outperformance_frequency:.2f}%")
+                        
+                        # Calculate outperformance during market downturns
+                        down_markets = aligned_benchmark_returns[aligned_benchmark_returns < 0]
+                        if len(down_markets) > 0:
+                            down_market_dates = down_markets.index
+                            strategy_down = aligned_strategy_returns[down_market_dates]
+                            benchmark_down = aligned_benchmark_returns[down_market_dates]
+                            outperformance_down_count = (strategy_down > benchmark_down).sum()
+                            outperformance_down_frequency = (outperformance_down_count / len(down_markets)) * 100
+                            print(f"Calculated Down Market Outperformance: {outperformance_down_frequency:.2f}%")
+                    else:
+                        print("Warning: No overlapping dates between strategy and benchmark returns")
+                    
+                    print(f"Added benchmark to plot: {benchmark_name}")
+                except Exception as e:
+                    print(f"Error processing benchmark data: {e}")
+                    benchmark_returns = None
+            
         except Exception as e:
             print(f"Error calculating performance metrics: {e}")
             total_return = annual_return = sharpe_ratio = sortino_ratio = max_drawdown = volatility = cvar = 0
@@ -566,32 +650,9 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         # Plot strategy performance on first subplot
         ax1.plot(cumulative_returns, linewidth=2, label='DAPO-DeepSeek Strategy')
         
-        # Plot benchmark if provided
-        benchmark_returns = None
-        if benchmark is not None:
-            try:
-                print("Processing benchmark data...")
-                benchmark_values, benchmark_name = benchmark
-                # Ensure benchmark values match the length of dates
-                if len(benchmark_values) != len(dates):
-                    print(f"Warning: Benchmark length ({len(benchmark_values)}) doesn't match dates length ({len(dates)})")
-                    # Truncate benchmark values to match dates length
-                    if len(benchmark_values) > len(dates):
-                        benchmark_values = benchmark_values[:len(dates)]
-                        print("Truncated benchmark values to match dates length")
-                    else:
-                        # If benchmark is shorter, truncate dates and portfolio series
-                        dates = dates[:len(benchmark_values)]
-                        cumulative_returns = cumulative_returns.iloc[:len(benchmark_values)]
-                        print("Truncated dates and portfolio series to match benchmark length")
-                
-                # Calculate benchmark returns
-                benchmark_series = pd.Series(benchmark_values, index=dates)
-                benchmark_returns = (benchmark_series / benchmark_series.iloc[0] - 1) * 100
-                ax1.plot(benchmark_returns, linewidth=2, label=benchmark_name)
-                print(f"Added benchmark to plot: {benchmark_name}")
-            except Exception as e:
-                print(f"Error processing benchmark data: {e}")
+        # Plot benchmark if available
+        if benchmark_returns is not None:
+            ax1.plot(benchmark_returns, linewidth=2, label=benchmark_name)
         
         # Calculate drawdowns for second subplot
         try:
@@ -606,14 +667,19 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         
         # Add metrics to plot
         try:
+            # Update the metrics text to include all metrics
             metrics_text = (
-                f"Total Return: {total_return:.2f}%\n"
+                f"Cumulative Return: {total_return:.2f}%\n"
                 f"Annual Return: {annual_return:.2f}%\n"
+                f"Max Drawdown: {max_drawdown:.2f}%\n"
                 f"Sharpe Ratio: {sharpe_ratio:.2f}\n"
                 f"Sortino Ratio: {sortino_ratio:.2f}\n"
-                f"Max Drawdown: {max_drawdown:.2f}%\n"
                 f"Volatility: {volatility:.2f}%\n"
-                f"CVaR (5%): {cvar:.2f}%"
+                f"CVaR (5%): {cvar:.2f}%\n"
+                f"Rachev Ratio: {rachev_ratio:.2f}\n"
+                f"Information Ratio: {information_ratio:.2f}\n"
+                f"Outperformance: {outperformance_frequency:.1f}%\n"
+                f"Down Market Outperf.: {outperformance_down_frequency:.1f}%"
             )
             
             # Add text box with metrics
@@ -643,8 +709,14 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
             
             # Save metrics to CSV for reference
             metrics_df = pd.DataFrame({
-                'Metric': ['Total Return', 'Annual Return', 'Sharpe Ratio', 'Sortino Ratio', 'Max Drawdown', 'Volatility', 'CVaR (5%)'],
-                'Value': [total_return, annual_return, sharpe_ratio, sortino_ratio, max_drawdown, volatility, cvar]
+                'Metric': ['Cumulative Return', 'Annual Return', 'Max Drawdown', 
+                        'Sharpe Ratio', 'Sortino Ratio', 'Volatility',
+                        'CVaR (5%)', 'Rachev Ratio', 'Information Ratio', 
+                        'Outperformance', 'Down Market Outperformance'],
+                'Value': [total_return, annual_return, max_drawdown, 
+                        sharpe_ratio, sortino_ratio, volatility,
+                        cvar, rachev_ratio, information_ratio, 
+                        outperformance_frequency, outperformance_down_frequency]
             })
             metrics_csv_path = 'dapo_results/dapo_deepseek_metrics.csv'
             metrics_df.to_csv(metrics_csv_path, index=False)
@@ -866,6 +938,18 @@ def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+    
+    # Filter data to start from 2020-01-01
+    print("Filtering data to start from 2020-01-01...")
+    trade_llm_risk = trade_llm_risk[trade_llm_risk['date'] >= '2020-01-01']
+
+    # Rebuild index after filtering
+    unique_dates = trade_llm_risk['date'].unique()
+    date_to_idx = {date: idx for idx, date in enumerate(unique_dates)}
+    trade_llm_risk['new_idx'] = trade_llm_risk['date'].map(date_to_idx)
+    trade_llm_risk = trade_llm_risk.set_index('new_idx')
+    print(f"Filtered data date range: {trade_llm_risk['date'].min()} to {trade_llm_risk['date'].max()}")
+    print(f"Filtered data has {len(unique_dates)} trading days")
     
     # Configure environment
     stock_dimension = len(trade_llm_risk.tic.unique())

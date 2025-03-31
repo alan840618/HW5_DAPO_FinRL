@@ -109,7 +109,7 @@ if __name__ == "__main__":
     trained_dapo = run_dapo(args.env, env_kwargs)
     
     # Save the final model
-    checkpoint_dir = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/checkpoint"
+    checkpoint_dir = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/checkpoint_paper"
     os.makedirs(checkpoint_dir, exist_ok=True)
     final_model_path = os.path.join(checkpoint_dir, "agent_dapo_deepseek_gpu_final.pth")
     torch.save({
