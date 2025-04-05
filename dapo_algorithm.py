@@ -16,9 +16,11 @@ from spinup.utils.mpi_tools import mpi_fork, mpi_avg, proc_id, mpi_statistics_sc
 from tqdm import tqdm
 from mpi4py import MPI
 
-# Check if GPU is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+# # Check if GPU is available
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# print(f"Using device: {device}")\
+
+device = torch.device("cpu")
 
 def combined_shape(length, shape=None):
     if shape is None:
@@ -300,7 +302,17 @@ def dapo(env_fn,
          logger_kwargs=dict(),
          save_freq=10,
          num_samples_per_state=10,  # Number of action samples per state for group advantage
-         env_kwargs=None):         # Environment kwargs for accessing stock dimensions
+         env_kwargs=None,
+         adjustment_type='both',   # Type of LLM adjustment: 'both', 'sentiment', 'risk', 'none'
+         alpha=1.0,                # Exponent for sentiment adjustment
+         beta=1.0,                 # Exponent for risk adjustment
+         force_cpu=False):         # Force CPU usage
+    
+    # If force_cpu is True, ensure we're using CPU
+    global device
+    if force_cpu:
+        device = torch.device("cpu")
+        print("Forcing CPU usage for DAPO algorithm")
     
     # Special function to avoid certain slowdowns from PyTorch + MPI combo.
     setup_pytorch_for_mpi()
@@ -503,15 +515,6 @@ def dapo(env_fn,
                     # For other actions, calculate hypothetical portfolio return
                     base_reward = calculate_portfolio_return(action, current_prices, next_prices)
                 
-                # Apply sentiment and risk adjustment to the reward
-                # Define mappings for risk and sentiment scores
-                risk_to_weight = {1: 0.99, 2: 0.995, 3: 1.0, 4: 1.005, 5: 1.01}
-                sentiment_to_weight = {1: 0.99, 2: 0.995, 3: 1.0, 4: 1.005, 5: 1.01}
-                
-                # Apply mappings to generate weights
-                llm_risks_weights = np.vectorize(risk_to_weight.get)(llm_risks)
-                llm_sentiment_weights = np.vectorize(sentiment_to_weight.get)(llm_sentiments)
-                
                 # Calculate position values based on this action and next prices
                 position_values = action * next_prices
                 total_value = np.sum(position_values)
@@ -521,6 +524,14 @@ def dapo(env_fn,
                     # If no positions, no adjustment
                     adjusted_reward = base_reward
                 else:
+                    # Define mappings for risk and sentiment scores
+                    risk_to_weight = {1: 0.99, 2: 0.995, 3: 1.0, 4: 1.005, 5: 1.01}
+                    sentiment_to_weight = {1: 0.99, 2: 0.995, 3: 1.0, 4: 1.005, 5: 1.01}
+                    
+                    # Apply mappings to generate weights
+                    llm_risks_weights = np.vectorize(risk_to_weight.get)(llm_risks)
+                    llm_sentiment_weights = np.vectorize(sentiment_to_weight.get)(llm_sentiments)
+                    
                     # Calculate weights based on portfolio allocation
                     stock_weights = position_values / total_value
                     
@@ -528,9 +539,20 @@ def dapo(env_fn,
                     aggregated_sentiment = np.dot(stock_weights, llm_sentiment_weights)
                     aggregated_risk = np.dot(stock_weights, llm_risks_weights)
                     
-                    # Apply the r_{t,i}' = r_{t,i} × S_{f,i}/R_{f,i} formula
-                    adjustment_factor = aggregated_sentiment / (aggregated_risk + 1e-8)
-                    adjusted_reward = base_reward * adjustment_factor
+                    # Apply reward adjustment based on the specified adjustment type and exponents
+                    if adjustment_type == 'both':
+                        # Use the r_{t,i}' = r_{t,i} u00d7 S_{f,i}^alpha/R_{f,i}^beta formula
+                        adjustment_factor = (aggregated_sentiment ** alpha) / ((aggregated_risk ** beta) + 1e-8)
+                        adjusted_reward = base_reward * adjustment_factor
+                    elif adjustment_type == 'sentiment':
+                        # Only use sentiment with exponent
+                        adjusted_reward = base_reward * (aggregated_sentiment ** alpha)
+                    elif adjustment_type == 'risk':
+                        # Only use risk with exponent (inverse relationship)
+                        adjusted_reward = base_reward / ((aggregated_risk ** beta) + 1e-8)
+                    else:  # 'none'
+                        # No adjustment
+                        adjusted_reward = base_reward
                 
                 # Store in buffer with the same state index for all samples
                 buf.store(current_state, action, adjusted_reward, logp, state_idx)
@@ -612,7 +634,7 @@ def dapo(env_fn,
     return ac
 
 # Main execution
-def run_dapo(env_train, env_kwargs):
+def run_dapo(env_train, env_kwargs, adjustment_type='both', alpha=1.0, beta=1.0):
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default=env_train)
@@ -651,7 +673,10 @@ def run_dapo(env_train, env_kwargs):
         epochs=100,
         env_kwargs=env_kwargs,
         epsilon_low=0.2,      # DAPO specific parameter
-        epsilon_high=0.28     # DAPO specific parameter
+        epsilon_high=0.28,    # DAPO specific parameter
+        adjustment_type=adjustment_type,   # Type of LLM adjustment: 'both', 'sentiment', 'risk', 'none'
+        alpha=alpha,                # Exponent for sentiment adjustment
+        beta=beta                 # Exponent for risk adjustment
     )
     
     return trained_dapo

@@ -14,17 +14,17 @@ import time
 import argparse
 
 # Import the DAPO implementation
-from dapo_algorithm import run_dapo
+from dapo_algorithm import dapo, MLPActorCritic
 
 # Make necessary directories
 check_and_make_directories([TRAINED_MODEL_DIR])
 
-# Check if GPU is available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Using device: {device}")
+# Force CPU usage
+device = torch.device("cpu")
+print("Using CPU (forcing CPU usage)")
 
 # Download and load both risk and sentiment datasets
-dataset_dir = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/dataset"
+dataset_dir = "./dataset"
 risk_file = os.path.join(dataset_dir, "train_data_deepseek_risk_2013_2018.csv")
 sentiment_file = os.path.join(dataset_dir, "train_data_deepseek_sentiment_2013_2018.csv")
 
@@ -89,32 +89,69 @@ env_train, _ = e_train_gym.get_sb_env()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--env', type=str, default=env_train)
     parser.add_argument('--hid', type=int, default=512)
     parser.add_argument('--l', type=int, default=2)
     parser.add_argument('--seed', '-s', type=int, default=0)
     parser.add_argument('--cpu', type=int, default=4)
     parser.add_argument('--exp_name', type=str, default='dapo')
-    parser.add_argument('-f', '--file', type=str, help='Kernel connection file')
-    parser.add_argument('extra_args', nargs=argparse.REMAINDER)
     parser.add_argument('--cpu_only', action='store_true', help='Force CPU usage even if GPU is available')
     parser.add_argument('--gpu_id', type=int, default=0, help='GPU device ID when multiple GPUs are available')
+    parser.add_argument('--adjustment_type', type=str, default='both', choices=['both', 'sentiment', 'risk', 'none'],
+                        help='Type of LLM adjustment: both (sentiment and risk), sentiment only, risk only, or none')
+    parser.add_argument('--alpha', type=float, default=1.0, help='Exponent for sentiment adjustment (S_f^alpha)')
+    parser.add_argument('--beta', type=float, default=1.0, help='Exponent for risk adjustment (R_f^beta)')
     args = parser.parse_args()
     
     # Important: For single process running without MPI, don't use mpi_fork
     # This will help avoid the CUDA/MPI conflicts
     # If you want to use MPI, run the script with mpirun directly as in the comment at the top
     
-    # Train the DAPO agent with our env_kwargs
-    trained_dapo = run_dapo(args.env, env_kwargs)
+    # Force CPU usage regardless of arguments
+    device = torch.device("cpu")
+    print("Forcing CPU usage for training")
+    
+    from spinup.utils.run_utils import setup_logger_kwargs
+    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+    
+    # Train the DAPO agent with our env_kwargs and adjustment parameters
+    trained_dapo = dapo(
+        lambda : env_train, 
+        actor_critic=MLPActorCritic,
+        ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), 
+        seed=args.seed, 
+        logger_kwargs=logger_kwargs,
+        num_samples_per_state=10,  # Number of action samples per state for DAPO
+        epochs=100,
+        env_kwargs=env_kwargs,
+        epsilon_low=0.2,      # DAPO specific parameter
+        epsilon_high=0.28,    # DAPO specific parameter
+        adjustment_type=args.adjustment_type,
+        alpha=args.alpha,
+        beta=args.beta,
+        force_cpu=True  # Add new parameter to force CPU usage
+    )
     
     # Save the final model
-    checkpoint_dir = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/checkpoint_paper"
+    checkpoint_dir = "./checkpoint"
     os.makedirs(checkpoint_dir, exist_ok=True)
-    final_model_path = os.path.join(checkpoint_dir, "agent_dapo_deepseek_gpu_final.pth")
+    
+    # Create a filename that includes the adjustment parameters
+    if args.adjustment_type == 'both':
+        model_name = f"agent_dapo_{args.adjustment_type}_a{args.alpha}_b{args.beta}.pth"
+    elif args.adjustment_type == 'sentiment':
+        model_name = f"agent_dapo_{args.adjustment_type}_a{args.alpha}.pth"
+    elif args.adjustment_type == 'risk':
+        model_name = f"agent_dapo_{args.adjustment_type}_b{args.beta}.pth"
+    else:  # 'none'
+        model_name = "agent_dapo_no_adjustment.pth"
+    
+    final_model_path = os.path.join(checkpoint_dir, model_name)
     torch.save({
         'epoch': 99,
         'model_state_dict': trained_dapo.state_dict(),
+        'adjustment_type': args.adjustment_type,
+        'alpha': args.alpha,
+        'beta': args.beta
     }, final_model_path)
     print(f"\nTraining finished and final model saved in {final_model_path}")
     print(f"Checkpoints saved in {checkpoint_dir}")

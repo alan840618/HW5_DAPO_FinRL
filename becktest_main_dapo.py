@@ -14,13 +14,6 @@ from gymnasium.spaces import Box, Discrete
 import gym
 import seaborn as sns
 
-# Add the directory to python path to import the modules
-# sys.path.append("/home/ruijian/FinRL_performance_impact.png (Sentiment/Risk impact over time)")
-    # print("- dapo_deepseek_trading_results.csv (Performance metrics time series)")
-    # print("- dapo_deepseek_portfolio_allocation.csv (Full portfolio allocation over time)")
-    # print("- dapo_deepseek_portfolio_analysis.csv (Risk and sentiment analysis per stock)")
-    # print("\nTo compare with CPPO DeepSeek performance, run the CPPO backtest script separately.")
-
 # Import necessary components from FinRL_DeepSeek_backtest
 from FinRL_DeepSeek_backtest import (
     INDICATORS,
@@ -31,10 +24,10 @@ from FinRL_DeepSeek_backtest import (
 from env_stocktrading_llm_risk import StockTradingEnv as StockTradingEnv_llm_risk
 
 # Set paths and constants
-MODEL_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/checkpoint/agent_dapo_deepseek_gpu_final.pth"
-RISK_DATA_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/dataset/trade_data_deepseek_risk_2019_2023.csv"
-SENTIMENT_DATA_PATH = "/home/ruijian/FinRL_Contest_2025/Task_1_FinRL_DeepSeek_Stock/dataset/trade_data_deepseek_sentiment_2019_2023.csv"
-TRADE_START_DATE = '2020-01-01'
+MODEL_PATH = "./checkpoint/agent_dapo_both_a6.0_b1.0.pth"
+RISK_DATA_PATH = "./dataset/trade_data_deepseek_risk_2019_2023.csv"
+SENTIMENT_DATA_PATH = "./dataset/trade_data_deepseek_sentiment_2019_2023.csv"
+TRADE_START_DATE = '2019-01-01'
 TRADE_END_DATE = '2023-12-31'
 
 # Check if CUDA is available and set device
@@ -476,7 +469,7 @@ def enhanced_DRL_prediction(act, environment, verbose=True):
         
         return dummy_assets, dummy_dates, dummy_actions, dummy_portfolio
 
-def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading Performance", save_path=None):
+def plot_performance(assets, dates, benchmark=None, title="Performance Comparison of DAPO Models with Ablation on Sentiment and Risk Adjustments", save_path=None):
     print(f"Generating performance plot with {len(assets)} asset points and {len(dates)} date points...")
     
     try:
@@ -517,7 +510,7 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
                 # Check for NaT values
                 if pd.isna(dates).any():
                     print("Warning: Some dates couldn't be converted to datetime. Using integer indices instead.")
-                    dates = pd.date_range(start='2020-01-01', periods=len(assets[1:]))
+                    dates = pd.date_range(start='2019-01-01', periods=len(assets[1:]))
             
             portfolio_series = pd.Series(assets[1:], index=dates)
             print(f"Created portfolio series with {len(portfolio_series)} points")
@@ -644,7 +637,8 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         
         print("Setting up figure with subplots...")
         # Setup figure with two subplots - returns and drawdowns
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [3, 1]})
+        fig, ax1 = plt.subplots(figsize=(16, 8))
+        # fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 12), gridspec_kw={'height_ratios': [3, 1]})
         
         print("Plotting strategy performance...")
         # Plot strategy performance on first subplot
@@ -652,18 +646,18 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         
         # Plot benchmark if available
         if benchmark_returns is not None:
-            ax1.plot(benchmark_returns, linewidth=2, label=benchmark_name)
+            ax1.plot(benchmark_returns, linewidth=2, label=benchmark_name, color='purple')
         
-        # Calculate drawdowns for second subplot
-        try:
-            drawdowns = (portfolio_series / portfolio_series.cummax() - 1) * 100
-            ax2.fill_between(drawdowns.index, drawdowns, 0, alpha=0.5, color='r')
-            ax2.set_ylabel('Drawdown (%)')
-            ax2.set_title('Drawdowns')
-            ax2.grid(True)
-            print("Added drawdown subplot")
-        except Exception as e:
-            print(f"Error calculating drawdowns: {e}")
+        # # Calculate drawdowns for second subplot
+        # try:
+        #     drawdowns = (portfolio_series / portfolio_series.cummax() - 1) * 100
+        #     ax2.fill_between(drawdowns.index, drawdowns, 0, alpha=0.5, color='r')
+        #     ax2.set_ylabel('Drawdown (%)')
+        #     ax2.set_title('Drawdowns')
+        #     ax2.grid(True)
+        #     print("Added drawdown subplot")
+        # except Exception as e:
+        #     print(f"Error calculating drawdowns: {e}")
         
         # Add metrics to plot
         try:
@@ -681,6 +675,8 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
                 f"Outperformance: {outperformance_frequency:.1f}%\n"
                 f"Down Market Outperf.: {outperformance_down_frequency:.1f}%"
             )
+
+            print("Metrics text:\n", metrics_text)
             
             # Add text box with metrics
             props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
@@ -694,7 +690,7 @@ def plot_performance(assets, dates, benchmark=None, title="DAPO-DeepSeek Trading
         ax1.set_ylabel('Cumulative Return (%)')
         ax1.set_title(title)
         ax1.grid(True)
-        ax1.legend()
+        ax1.legend(loc='upper left')
         
         # Adjust layout and save
         plt.tight_layout()
@@ -803,8 +799,134 @@ def get_benchmark_data(start_date, end_date, initial_value=1000000):
         print(f"Error retrieving benchmark data: {str(e)}")
         return None
 
+def plot_multiple_models(model_results, dates, benchmark=None, title="Performance Comparison of DAPO Models with Ablation on Sentiment and Risk Adjustments", save_dir=None):
+    """
+    Plot multiple model results on the same chart
+    
+    Args:
+        model_results (list): List of dicts with 'name' and 'assets' keys
+        dates (list): List of dates
+        benchmark (tuple): Optional (benchmark_values, benchmark_name)
+        title (str): Plot title
+        save_dir (str): Directory to save plot
+    """
+    print(f"Generating comparison plot for {len(model_results)} models...")
+    
+    try:
+        # Increase font sizes globally
+        plt.rcParams.update({'font.size': 18})  # Increase from 14 to 18
+        
+        # Create directory if it doesn't exist
+        os.makedirs(save_dir, exist_ok=True)
+        
+        # Set up figure with larger size for better readability
+        fig, ax1 = plt.subplots(figsize=(20, 10))  # Increased figure size
+        
+        
+        # Make sure dates are datetime
+        if not isinstance(dates[0], pd.Timestamp):
+            dates = pd.to_datetime(dates, errors='coerce')
+        
+        # Plot each model's performance
+        all_metrics = {}
+        colors = plt.cm.tab10.colors  # Use a color cycle
+        
+        for i, result in enumerate(model_results):
+            model_name = result['name']
+            assets = result['assets']
+            color = colors[i % len(colors)]
+            
+            # Create series for current model
+            portfolio_series = pd.Series(assets[1:], index=dates[:len(assets)-1])
+            
+            # Calculate returns
+            cumulative_returns = (portfolio_series / portfolio_series.iloc[0] - 1) * 100
+            
+            # Plot on main axis
+            ax1.plot(cumulative_returns, linewidth=2, label=model_name, color=color)
+            
+            # Calculate metrics
+            daily_returns = portfolio_series.pct_change().dropna()
+            
+            # Store metrics for comparison
+            all_metrics[model_name] = {
+                'total_return': cumulative_returns.iloc[-1],
+                'sharpe_ratio': np.sqrt(252) * daily_returns.mean() / daily_returns.std() if daily_returns.std() != 0 else 0,
+                'max_drawdown': ((portfolio_series / portfolio_series.cummax()) - 1).min() * 100
+            }
+            
+            # # Plot drawdown for first model only (to avoid clutter)
+            # if i == 0:
+            #     drawdowns = (portfolio_series / portfolio_series.cummax() - 1) * 100
+            #     ax2.fill_between(drawdowns.index, drawdowns, 0, alpha=0.5, color='r')
+            #     ax2.set_ylabel('Drawdown (%)')
+            #     ax2.set_title('Drawdowns (First Model)')
+            #     ax2.grid(True)
+        
+        # Plot benchmark if available
+        # Plot benchmark if available
+        if benchmark is not None:
+            benchmark_values, benchmark_name = benchmark
+            benchmark_series = pd.Series(benchmark_values, index=dates[:len(benchmark_values)])
+            benchmark_returns = (benchmark_series / benchmark_series.iloc[0] - 1) * 100
+            ax1.plot(benchmark_returns, linewidth=2, label=benchmark_name, color='purple')
+        
+        # Add metrics table as text
+        metrics_text = "Model Comparison:\n"
+        for model_name, metrics in all_metrics.items():
+            metrics_text += f"\n{model_name}:\n"
+            metrics_text += f"  Return: {metrics['total_return']:.2f}%\n"
+            metrics_text += f"  Sharpe: {metrics['sharpe_ratio']:.2f}\n"
+            metrics_text += f"  Max DD: {metrics['max_drawdown']:.2f}%\n"
+        
+        # # Add text box with metrics
+        # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        # ax1.text(0.02, 0.95, metrics_text, transform=ax1.transAxes, fontsize=10,
+        #         verticalalignment='top', bbox=props)
+        
+        # Finalize first subplot
+        ax1.set_ylabel('Cumulative Return (%)', fontsize=22)
+        ax1.set_title(title, fontsize=24)
+        ax1.grid(True)
+        ax1.legend(loc='best', fontsize=20)  # Increased legend font size
+        ax1.tick_params(axis='both', which='major', labelsize=18)  # Increase from 14 to 18
+        
+        # Adjust layout and save
+        plt.tight_layout()
+        
+        # Save to file
+        save_path = os.path.join(save_dir, "DAPO_Models_Comparison.png")
+        plt.savefig(save_path, dpi=300)
+        print(f"Successfully saved comparison plot to {save_path}")
+        
+        # Save metrics to CSV
+        metrics_df = pd.DataFrame({model: metrics for model, metrics in all_metrics.items()})
+        metrics_csv_path = os.path.join(save_dir, "dapo_models_comparison_metrics.csv")
+        metrics_df.to_csv(metrics_csv_path)
+        print(f"Saved comparison metrics to {metrics_csv_path}")
+        
+        plt.close(fig)
+        return True
+        
+    except Exception as e:
+        print(f"Error in plot_multiple_models: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 def main():
     # Load and merge trading data
+
+
+    print("Getting benchmark data...")
+    benchmark_data = get_benchmark_data(
+        start_date=TRADE_START_DATE, 
+        end_date=TRADE_END_DATE, 
+        initial_value=1000000
+    )
+
+
+
     try:
         # Check if both files exist
         if not os.path.exists(RISK_DATA_PATH):
@@ -939,9 +1061,9 @@ def main():
         traceback.print_exc()
         sys.exit(1)
     
-    # Filter data to start from 2020-01-01
-    print("Filtering data to start from 2020-01-01...")
-    trade_llm_risk = trade_llm_risk[trade_llm_risk['date'] >= '2020-01-01']
+    # Filter data to start from 2019-01-01
+    print("Filtering data to start from 2019-01-01...")
+    trade_llm_risk = trade_llm_risk[trade_llm_risk['date'] >= '2019-01-01']
 
     # Rebuild index after filtering
     unique_dates = trade_llm_risk['date'].unique()
@@ -1107,219 +1229,98 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
     print(f"Created save directory: {save_dir}")
 
-    # Run prediction and plot performance
-    try:
-        print("Running DAPO-DeepSeek prediction...")
-        assets_llm_risk, dates_llm_risk, actions_memory, portfolio_distribution = enhanced_DRL_prediction(loaded_dapo, e_trade_llm_risk_gym)
+        # Run predictions for all models
+    all_results = []
+    all_dates = None
+    
+    for model_config in MODELS:
+        print(f"\n=== Running inference for model: {model_config['name']} ===")
+        model_path = model_config['path']
+        model_name = model_config['name']
         
-        # Get benchmark data
-        print("Getting benchmark data...")
-        benchmark_data = None
+        # Check if model file exists
+        if not os.path.exists(model_path):
+            print(f"Model file not found: {model_path}")
+            continue
+            
+        # Load the model
+        print(f"Loading model from {model_path}...")
         try:
-            benchmark_data = get_benchmark_data(
-                start_date=dates_llm_risk[0], 
-                end_date=dates_llm_risk[-1], 
-                initial_value=1000000
+            # Create a fresh environment instance for each model
+            env_instance = StockTradingEnv_llm_risk(
+                df=trade_llm_risk.copy(),  # Use a copy to avoid state issues
+                stock_dim=stock_dimension,
+                hmax=100,
+                initial_amount=1000000,
+                num_stock_shares=[0] * stock_dimension,
+                buy_cost_pct=[0.001] * stock_dimension,
+                sell_cost_pct=[0.001] * stock_dimension,
+                state_space=state_space_llm_risk,
+                action_space=stock_dimension,
+                tech_indicator_list=INDICATORS,
+                turbulence_threshold=70, 
+                risk_indicator_col='vix',
+                reward_scaling=1.0
             )
-            if benchmark_data:
-                print(f"Benchmark data retrieved successfully: {benchmark_data[1]}")
+            
+            # Load model weights
+            loaded_model = MLPActorCritic(
+                env_instance.observation_space, 
+                env_instance.action_space, 
+                hidden_sizes=(512, 512),
+                activation=nn.ReLU
+            )
+            
+            checkpoint = torch.load(model_path, map_location=device)
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                loaded_model.load_state_dict(checkpoint['model_state_dict'])
             else:
-                print("Benchmark data retrieval failed, proceeding without benchmark")
-        except Exception as e:
-            print(f"Error getting benchmark data: {e}")
-            print("Proceeding without benchmark data")
-        
-        # Plot performance
-        print("Plotting performance...")
-        try:
-            # Create directory for saving results if it doesn't exist
-            save_dir = "dapo_results"
-            os.makedirs(save_dir, exist_ok=True)
-            print(f"Created/verified save directory: {os.path.abspath(save_dir)}")
+                loaded_model.load_state_dict(checkpoint)
+                
+            loaded_model.to(device)
+            loaded_model.eval()
             
-            # Set the save path for the plot
-            plot_save_path = os.path.join(save_dir, "DAPO_DeepSeek_Trading_Performance.png")
+            # Run prediction
+            assets, dates, _, _ = enhanced_DRL_prediction(loaded_model, env_instance)
             
-            # Call the plot_performance function with robust error handling
-            plot_performance(
-                assets=assets_llm_risk, 
-                dates=dates_llm_risk, 
-                benchmark=benchmark_data, 
-                title="DAPO-DeepSeek Trading Performance", 
-                save_path=save_dir
-            )
-            print("Performance plotting completed successfully")
+            # Store results
+            all_results.append({
+                "name": model_name,
+                "assets": assets
+            })
+            
+            # Store dates from first model run (assuming same dates for all models)
+            if all_dates is None:
+                all_dates = dates
+                
         except Exception as e:
-            print(f"Error in performance plotting: {e}")
+            print(f"Error running model {model_name}: {e}")
             import traceback
             traceback.print_exc()
-            print("Attempting alternative plotting approach...")
-            
-            # Try a simplified plotting approach as fallback
-            try:
-                plt.figure(figsize=(16, 8))
-                plt.plot(dates_llm_risk, assets_llm_risk, label='DAPO-DeepSeek')
-                plt.title("DAPO-DeepSeek Trading Performance (Simplified)")
-                plt.xlabel("Date")
-                plt.ylabel("Portfolio Value ($)")
-                plt.legend()
-                plt.grid(True)
-                
-                # Save the simplified plot
-                simple_save_path = os.path.join(save_dir, "DAPO_DeepSeek_Trading_Performance_Simple.png")
-                plt.savefig(simple_save_path, dpi=300)
-                print(f"Saved simplified performance plot to {simple_save_path}")
-                plt.close()
-            except Exception as e2:
-                print(f"Even simplified plotting failed: {e2}")
-    except Exception as e:
-        print(f"Error in prediction or plotting: {e}")
-        import traceback
-        traceback.print_exc()
     
-    # Print metrics
-    print("\n=== DAPO-DeepSeek Performance Metrics ===")
-    # for key, value in result['metrics'].items():
-    #     print(f"{key.replace('_', ' ').title()}: {value:.2f}{'%' if 'return' in key or 'drawdown' in key or 'volatility' in key or 'cvar' in key else ''}")
-    
-    # Save results to CSV
-    # Ensure all arrays have the same length before creating DataFrame
-    # min_length = min(len(result['data']['dates']), 
-    #                  len(result['data']['portfolio_returns']),
-    #                  len(result['data']['benchmark_returns']) if result['data']['benchmark_returns'] is not None else float('inf'))
-    
-    # result_df = pd.DataFrame({
-    #     'Date': result['data']['dates'][:min_length],
-    #     'DAPO_DeepSeek_Return': result['data']['portfolio_returns'][:min_length],
-    # })
-    
-    # if benchmark and result['data']['benchmark_returns'] is not None:
-    #     result_df['Benchmark_Return'] = result['data']['benchmark_returns'][:min_length]
-    
-    # result_df.to_csv('dapo_deepseek_trading_results.csv', index=False)
-    # print("\nResults saved to dapo_deepseek_trading_results.csv")
-
-    # Analyze portfolio allocation over time
-    if portfolio_distribution:
-        # Create a dataframe to store the portfolio allocation
-        allocation_df = pd.DataFrame([{
-            'day': i, 
-            'cash': pd['cash'],
-            'sentiment_impact': pd.get('sentiment_impact', 1.0),
-            'risk_impact': pd.get('risk_impact', 1.0),
-            **{f'stock_{j}': stock for j, stock in enumerate(pd['stocks'])}
-        } for i, pd in enumerate(portfolio_distribution)])
-        
-        # Calculate average portfolio allocation
-        avg_cash = allocation_df['cash'].mean()
-        
-        # Get stock names
-        stock_names = trade_llm_risk.tic.unique()
-        
-        # Calculate average stock allocations
-        avg_stocks = np.zeros(len(stock_names))
-        for i in range(len(stock_names)):
-            col = f'stock_{i}'
-            if col in allocation_df.columns:
-                avg_stocks[i] = allocation_df[col].mean()
-        
-        # Calculate average sentiment and risk impact
-        avg_sentiment = allocation_df['sentiment_impact'].mean()
-        avg_risk = allocation_df['risk_impact'].mean()
-        sentiment_risk_ratio = avg_sentiment / avg_risk if avg_risk > 0 else 1.0
-        
-        print("\n=== Average Portfolio Allocation ===")
-        print(f"Cash: {avg_cash*100:.2f}%")
-        print("Stocks:")
-        for i, stock in enumerate(stock_names):
-            if i < len(avg_stocks):
-                print(f"  {stock}: {avg_stocks[i]*100:.2f}%")
-                
-        print("\n=== DAPO Feature Impact Analysis ===")
-        print(f"Average Sentiment Impact: {avg_sentiment:.4f}")
-        print(f"Average Risk Impact: {avg_risk:.4f}")
-        print(f"Average Sentiment/Risk Ratio: {sentiment_risk_ratio:.4f}")
-        
-        # Analyze risk exposure based on portfolio weights and LLM risk scores
-        # First, get the average LLM risk score for each stock
-        risk_df = trade_llm_risk.groupby('tic')['llm_risk'].mean().reset_index()
-        risk_df.columns = ['tic', 'avg_risk_score']
-        
-        # Get the average LLM sentiment score for each stock
-        sentiment_df = trade_llm_risk.groupby('tic')['llm_sentiment'].mean().reset_index()
-        sentiment_df.columns = ['tic', 'avg_sentiment_score']
-        
-        # Create a DataFrame with stock names and their average weights
-        portfolio_weights = pd.DataFrame({
-            'tic': stock_names[:len(avg_stocks)],
-            'avg_weight': avg_stocks[:len(stock_names)]
-        })
-        
-        # Merge with risk and sentiment scores
-        portfolio_analysis = portfolio_weights.merge(risk_df, on='tic', how='left')
-        portfolio_analysis = portfolio_analysis.merge(sentiment_df, on='tic', how='left')
-        
-        # Define the mappings for risk and sentiment scores
-        risk_interpretations = {
-            1: "Very Low Risk",
-            2: "Low Risk",
-            3: "Neutral Risk",
-            4: "High Risk",
-            5: "Very High Risk"
-        }
-        
-        sentiment_interpretations = {
-            1: "Very Negative",
-            2: "Negative",
-            3: "Neutral",
-            4: "Positive",
-            5: "Very Positive"
-        }
-        
-        # Add risk and sentiment interpretation columns
-        portfolio_analysis['risk_level'] = portfolio_analysis['avg_risk_score'].apply(
-            lambda x: risk_interpretations.get(round(x), "Unknown")
-        )
-        
-        portfolio_analysis['sentiment_level'] = portfolio_analysis['avg_sentiment_score'].apply(
-            lambda x: sentiment_interpretations.get(round(x), "Unknown")
-        )
-        
-        # Calculate sentiment-to-risk ratio for each stock
-        portfolio_analysis['sentiment_risk_ratio'] = portfolio_analysis['avg_sentiment_score'] / portfolio_analysis['avg_risk_score']
-        
-        # Calculate risk-weighted and sentiment-weighted allocations
-        portfolio_analysis['risk_weighted_allocation'] = portfolio_analysis['avg_weight'] * portfolio_analysis['avg_risk_score']
-        portfolio_analysis['sentiment_weighted_allocation'] = portfolio_analysis['avg_weight'] * portfolio_analysis['avg_sentiment_score']
-        
-        # Calculate DAPO specific metric: sentiment/risk weighted allocation
-        portfolio_analysis['dapo_weighted_allocation'] = portfolio_analysis['avg_weight'] * portfolio_analysis['sentiment_risk_ratio']
-        
-        # Calculate total weighted exposures
-        total_risk_exposure = portfolio_analysis['risk_weighted_allocation'].sum()
-        total_sentiment_exposure = portfolio_analysis['sentiment_weighted_allocation'].sum()
-        total_dapo_exposure = portfolio_analysis['dapo_weighted_allocation'].sum()
-        
-        print("\n=== Portfolio DAPO Analysis ===")
-        print(f"Total Risk-Weighted Exposure: {total_risk_exposure:.4f}")
-        print(f"Total Sentiment-Weighted Exposure: {total_sentiment_exposure:.4f}")
-        print(f"Total DAPO-Weighted Exposure: {total_dapo_exposure:.4f}")
-        print(f"Portfolio Sentiment/Risk Ratio: {total_sentiment_exposure/total_risk_exposure:.4f}")
-        
-        print("\nTop 5 Highest DAPO-Weighted Positions:")
-        
-        # Sort by DAPO-weighted allocation and show top 5
-        top_dapo = portfolio_analysis.sort_values('dapo_weighted_allocation', ascending=False).head(5)
-        for _, row in top_dapo.iterrows():
-            print(f"  {row['tic']}: Weight {row['avg_weight']*100:.2f}%, "
-                  f"Sentiment {row['avg_sentiment_score']:.2f} ({row['sentiment_level']}), "
-                  f"Risk {row['avg_risk_score']:.2f} ({row['risk_level']}), "
-                  f"S/R Ratio {row['sentiment_risk_ratio']:.2f}")
-        
-        # Save allocation and analysis to CSV
-        allocation_df.to_csv('dapo_deepseek_portfolio_allocation.csv', index=False)
-        portfolio_analysis.to_csv('dapo_deepseek_portfolio_analysis.csv', index=False)
-        print("\nPortfolio allocation and analysis saved to CSV files")
+    # Plot all models together
+    if all_results and all_dates:
+        plot_multiple_models(all_results, all_dates, benchmark=benchmark_data, save_dir=save_dir)
+    else:
+        print("No successful model runs to plot")
 
 if __name__ == "__main__":
+
+    MODELS = [
+        {
+            "name": "Baseline (α=1, β=1)",
+            "path": "./checkpoint/agent_dapo_baseline.pth"
+        },
+        # {
+        #     "name": "Only Risk (α=0, β=1)", 
+        #     "path": "./checkpoint/agent_dapo_risk_b1.0.pth"
+        # },
+        # {
+        #     "name": "Only Sentiment (α=1, β=0)",
+        #     "path": "./checkpoint/agent_dapo_sentiment_a1.0.pth"
+        # }
+    ]
+    # Add more models as needed
+
     main()
+
