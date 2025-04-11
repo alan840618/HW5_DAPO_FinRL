@@ -1309,7 +1309,7 @@ if __name__ == "__main__":
     MODELS = [
         {
             "name": "Baseline (α=1, β=1)",
-            "path": "./checkpoint/agent_dapo_baseline.pth"
+            "path": "./checkpoint/model_rl.pth"
         },
         # {
         #     "name": "Only Risk (α=0, β=1)", 
