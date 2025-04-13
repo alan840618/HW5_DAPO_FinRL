@@ -23,6 +23,7 @@ conda install -c conda-forge huggingface_hub -y
 conda install -c conda-forge alpaca-py -y
 conda install -c conda-forge selenium -y
 conda install -c conda-forge webdriver-manager -y
+pip install gymnasium
 pip install git+https://github.com/benstaf/FinRL.git
 git clone https://github.com/benstaf/spinningup_pytorch.git
 cd spinningup_pytorch
