@@ -24,7 +24,7 @@ from FinRL_DeepSeek_backtest import (
 from env_stocktrading_llm_risk import StockTradingEnv as StockTradingEnv_llm_risk
 
 # Set paths and constants
-MODEL_PATH = "./checkpoint/agent_dapo_both_a6.0_b1.0.pth"
+MODEL_PATH = "./checkpoint/model_rl.pth"
 RISK_DATA_PATH = "./dataset/trade_data_deepseek_risk_2019_2023.csv"
 SENTIMENT_DATA_PATH = "./dataset/trade_data_deepseek_sentiment_2019_2023.csv"
 TRADE_START_DATE = '2019-01-01'
@@ -159,25 +159,55 @@ def custom_DAPO_prediction(act, environment, device='cuda'):
             """Extract prices from state"""
             try:
                 stock_dim = len(environment.df.tic.unique())
-                return state[0, 1:stock_dim+1]
+                
+                # Check if state is a 2D array or a 1D array
+                if isinstance(state, np.ndarray):
+                    if state.ndim == 2:
+                        # If 2D array, use the first row
+                        state_vector = state[0]
+                    else:
+                        # If 1D array, use it directly
+                        state_vector = state
+                else:
+                    # If not a numpy array, try to convert it
+                    state_vector = np.array(state).flatten()
+                    
+                return state_vector[1:stock_dim+1]
             except Exception as e:
                 print(f"Error extracting prices: {e}")
+                print(f"State shape: {state.shape if hasattr(state, 'shape') else 'unknown'}")
+                print(f"State type: {type(state)}")
                 return None
 
         def extract_llm_features(state):
             """Extract LLM sentiment and risk scores from state"""
             try:
                 stock_dim = len(environment.df.tic.unique())
+                
+                # Check if state is a 2D array or a 1D array
+                if isinstance(state, np.ndarray):
+                    if state.ndim == 2:
+                        # If 2D array, use the first row
+                        state_vector = state[0]
+                    else:
+                        # If 1D array, use it directly
+                        state_vector = state
+                else:
+                    # If not a numpy array, try to convert it
+                    state_vector = np.array(state).flatten()
+                    
                 # State space structure: [Current Balance] + [Stock Prices] + [Stock Shares] + [Technical Indicators] + [LLM Sentiment] + [LLM Risk]
                 sentiment_start = -(2 * stock_dim)  # Second to last block
                 risk_start = -stock_dim  # Last block
                 
-                llm_sentiments = state[0, sentiment_start:risk_start]
-                llm_risks = state[0, risk_start:]
+                llm_sentiments = state_vector[sentiment_start:risk_start]
+                llm_risks = state_vector[risk_start:]
                 
                 return llm_sentiments, llm_risks
             except Exception as e:
                 print(f"Error extracting LLM features: {e}")
+                print(f"State shape: {state.shape if hasattr(state, 'shape') else 'unknown'}")
+                print(f"State type: {type(state)}")
                 # Return default neutral values
                 stock_dim = len(environment.df.tic.unique())
                 return np.ones(stock_dim) * 3, np.ones(stock_dim) * 3
@@ -190,13 +220,21 @@ def custom_DAPO_prediction(act, environment, device='cuda'):
                     # Create tensor on the appropriate device
                     print(f"Step {i}: Creating tensor from state...")
                     if isinstance(state, np.ndarray):
-                        s_tensor = torch.as_tensor(state, dtype=torch.float32).unsqueeze(0).to(device)
+                        # Print state shape for debugging
+                        print(f"State shape: {state.shape}")
+                        s_tensor = torch.as_tensor(state, dtype=torch.float32).to(device)
+                        # If state is 1D, add batch dimension
+                        if s_tensor.dim() == 1:
+                            s_tensor = s_tensor.unsqueeze(0)
                     else:
                         print(f"Warning: State is not a numpy array. Type: {type(state)}")
                         # Try to convert to numpy array first
                         try:
                             state_np = np.array(state)
-                            s_tensor = torch.as_tensor(state_np, dtype=torch.float32).unsqueeze(0).to(device)
+                            s_tensor = torch.as_tensor(state_np, dtype=torch.float32).to(device)
+                            # If state is 1D, add batch dimension
+                            if s_tensor.dim() == 1:
+                                s_tensor = s_tensor.unsqueeze(0)
                         except Exception as e:
                             print(f"Error converting state to tensor: {e}")
                             # Create a dummy state tensor with the right shape
