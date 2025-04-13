@@ -1,0 +1,16 @@
+name: finrl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - gcc
+  - swig
+  - box2d-py
+  - mpi4py
+  - datasets
+  - alpaca-py
+  - selenium
+  - webdriver-manager
+  - jupyter
+  - nbconvert
+prefix: /home/ruijian/.conda/envs/finrl
