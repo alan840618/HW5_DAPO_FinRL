@@ -890,8 +890,20 @@ def plot_multiple_models(model_results, dates, benchmark=None, title="Performanc
             all_metrics[model_name] = {
                 'total_return': cumulative_returns.iloc[-1],
                 'sharpe_ratio': np.sqrt(252) * daily_returns.mean() / daily_returns.std() if daily_returns.std() != 0 else 0,
-                'max_drawdown': ((portfolio_series / portfolio_series.cummax()) - 1).min() * 100
+                'max_drawdown': ((portfolio_series / portfolio_series.cummax()) - 1).min() * 100,
+                'volatility': daily_returns.std() * np.sqrt(252) * 100,
+                'win_rate': (daily_returns > 0).sum() / len(daily_returns) * 100 if len(daily_returns) > 0 else 0
             }
+            
+            # Calculate Sortino ratio (downside risk only)
+            downside_returns = daily_returns[daily_returns < 0]
+            all_metrics[model_name]['sortino_ratio'] = np.sqrt(252) * daily_returns.mean() / downside_returns.std() if len(downside_returns) > 0 and downside_returns.std() != 0 else 0
+            
+            # Calculate Conditional Value at Risk (CVaR)
+            confidence_level = 0.05  # 5% confidence level
+            var = np.percentile(daily_returns, confidence_level * 100)
+            all_metrics[model_name]['cvar'] = daily_returns[daily_returns <= var].mean() * 100 if len(daily_returns[daily_returns <= var]) > 0 else 0
+            
             
             # # Plot drawdown for first model only (to avoid clutter)
             # if i == 0:
@@ -916,6 +928,17 @@ def plot_multiple_models(model_results, dates, benchmark=None, title="Performanc
             metrics_text += f"  Return: {metrics['total_return']:.2f}%\n"
             metrics_text += f"  Sharpe: {metrics['sharpe_ratio']:.2f}\n"
             metrics_text += f"  Max DD: {metrics['max_drawdown']:.2f}%\n"
+      
+        
+        metrics_print = "Model Comparison:\n"
+        for model_name, metrics in all_metrics.items():
+            metrics_print += f"\n{model_name}:\n"
+            metrics_print += f"  Cumulative Return: {metrics['total_return']:.2f}%\n"
+            metrics_print += f"  Sharpe Ratio: {metrics['sharpe_ratio']:.2f}\n"
+            metrics_print += f"  Max Drawdown: {metrics['max_drawdown']:.2f}%\n"
+            metrics_print += f"  Volatility: {metrics['volatility']:.2f}%\n"
+            metrics_print += f"  Outperformance Frequency: {metrics['win_rate']:.2f}%\n"
+            metrics_print += f"  CVaR (5%): {metrics['cvar']:.2f}%\n"
         
         # # Add text box with metrics
         # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
@@ -944,6 +967,7 @@ def plot_multiple_models(model_results, dates, benchmark=None, title="Performanc
         print(f"Saved comparison metrics to {metrics_csv_path}")
         
         plt.close(fig)
+        print(f"{metrics_print}")
         return True
         
     except Exception as e:
@@ -1267,7 +1291,7 @@ def main():
     os.makedirs(save_dir, exist_ok=True)
     print(f"Created save directory: {save_dir}")
 
-        # Run predictions for all models
+    # Run predictions for all models
     all_results = []
     all_dates = None
     
