@@ -39,7 +39,7 @@ import pandas as pd
 
 #from finrl.agents.stablebaselines3.models import DRLAgent
 from finrl.config import INDICATORS, TRAINED_MODEL_DIR
-from env_stocktrading import StockTradingEnv
+# from env_stocktrading import StockTradingEnv
 
 
 # # Import PPO-DeepSeek environments
@@ -245,7 +245,7 @@ env_kwargs_llm_risk = {
 # In[ ]:
 
 
-e_trade_gym = StockTradingEnv(df = trade, turbulence_threshold = 70,risk_indicator_col='vix', **env_kwargs)
+# e_trade_gym = StockTradingEnv(df = trade, turbulence_threshold = 70,risk_indicator_col='vix', **env_kwargs)
 # env_trade, obs_trade = e_trade_gym.get_sb_env()
 
 
