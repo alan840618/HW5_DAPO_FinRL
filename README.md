@@ -15,7 +15,38 @@ run `installation_script.sh` on Ubuntu server (128 GB RAM CPU instance recommend
 
 This project uses stock trading data and financial news for training RL agents with LLM signals.
 
-### 🔧 Dataset Preparation from Scratch
+
+### 💾 Direct Dataset Download (Recommended)
+
+Skip preprocessing and directly download the full dataset from:  
+👉 [benstaf/nasdaq_2013_2023](https://huggingface.co/datasets/benstaf/nasdaq_2013_2023)
+
+Download the following files to the `./dataset` folder:
+
+```
+trade_data_2019_2023.csv  
+trade_data_deepseek_risk_2019_2023.csv  
+trade_data_deepseek_sentiment_2019_2023.csv  
+train_data_2013_2018.csv  
+train_data_deepseek_risk_2013_2018.csv  
+train_data_deepseek_sentiment_2013_2018.csv
+```
+
+Alternatively, run `download_data.sh` to download the trade data and model for backtesting only.
+This will generate the `./dataset` folder with the following files:
+
+```
+trade_data_deepseek_risk_2019_2023.csv  
+trade_data_deepseek_sentiment_2019_2023.csv  
+```
+
+and the `./checkpoint` folder with the following file:
+
+```
+model_rl.pth
+```
+
+### 🔧 Dataset Preparation from Scratch (Optional)
 
 The base dataset is **FNSPID**:  
 - [FNSPID on Hugging Face](https://huggingface.co/datasets/Zihan1004/FNSPID) (see `Stock_news/nasdaq_exteral_data.csv`)  
@@ -38,21 +69,6 @@ This produces agent-ready datasets.
 
 ---
 
-### 💾 Direct Dataset Download
-
-Skip preprocessing and directly download the full dataset from:  
-👉 [benstaf/nasdaq_2013_2023](https://huggingface.co/datasets/benstaf/nasdaq_2013_2023)
-
-Download the following files to the `./dataset` folder:
-
-```
-trade_data_2019_2023.csv  
-trade_data_deepseek_risk_2019_2023.csv  
-trade_data_deepseek_sentiment_2019_2023.csv  
-train_data_2013_2018.csv  
-train_data_deepseek_risk_2013_2018.csv  
-train_data_deepseek_sentiment_2013_2018.csv
-```
 
 ## 🏋️‍♂️ Training and Environments
 
@@ -72,5 +88,5 @@ The trained model from this command is available at:
 To evaluate the trained agent, run:
 
 ```bash
-python becktest_main_dapo.py
+python backtest_main_dapo.py
 ```
