@@ -1,6 +1,12 @@
-# FinRL_Contest_2025
+# 🏅 FinRL Contest 2025 Achievement (FinRL-DAPO-SR)
+
+🎉 **Accepted at the 2025 IEEE 11th International Conference on Intelligent Data and Security (IDS). Ranked 2nd place in the FinRL Contest 2025 (Task 1).**
+
+This repository (**FinRL-DAPO-SR**) contains our implementation built upon the [FinRL-DeepSeek paper](https://arxiv.org/abs/2502.07393), integrating reinforcement learning (RL) with large language models (LLMs) for automated stock trading.
 
 ![dapo_results](https://github.com/user-attachments/assets/5dc3d27f-44b1-4fdc-9fc0-9ce95717ed18)
+
+For further details, refer to the [official FinRL Contest documentation](https://finrl-contest.readthedocs.io/en/latest/).
 
 This repo is an implementation built on top of the [FinRL-DeepSeek paper](https://arxiv.org/abs/2502.07393),  
 which combines reinforcement learning (RL) and large language models (LLMs) for automated stock trading using price and news data.
