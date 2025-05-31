@@ -1,94 +1,51 @@
-# 🏅 FinRL Contest 2025 Achievement (FinRL-DAPO-SR)
+## 環境安裝(Windows 適用)
+1. 先安裝Anaconda prompt
+2. 執行`setup.sh` 
 
-🎉 **Accepted at the 2025 IEEE 11th International Conference on Intelligent Data and Security (IDS). Ranked 2nd place in the FinRL Contest 2025 (Task 1).**
+## 預處理資料下載
 
-This repository (**FinRL-DAPO-SR**) contains our implementation described in our paper: [**A New DAPO Algorithm for Stock Trading** (arXiv:2505.06408)](https://arxiv.org/abs/2505.06408). We integrate reinforcement learning (RL) with large language models (LLMs) for automated stock trading using price and news data, significantly enhancing efficiency and performance compared to previous methods.
+使用download_data.bat下載預處理數據集(已加入LLM判斷訊號)
+- [benstaf/nasdaq_2013_2023](https://huggingface.co/datasets/benstaf/nasdaq_2013_2023)
 
-![dapo_results](https://github.com/user-attachments/assets/5dc3d27f-44b1-4fdc-9fc0-9ce95717ed18)
+### 未處理資料下載
 
-For further details, refer to the [official FinRL Contest documentation](https://finrl-contest.readthedocs.io/en/latest/).
-
-Our implementation is based on the [FinRL-DeepSeek codebase](https://github.com/benstaf/FinRL_DeepSeek).
-
-## Installation of dependencies 
-run `installation_script.sh` on Ubuntu server (128 GB RAM CPU instance recommended)
-
-## 📊 Datasets and Preprocessing
-
-This project uses stock trading data and financial news for training RL agents with LLM signals.
-
-
-### 💾 Direct Dataset Download (Recommended)
-
-Skip preprocessing and directly download the full dataset from:  
-👉 [benstaf/nasdaq_2013_2023](https://huggingface.co/datasets/benstaf/nasdaq_2013_2023)
-
-Download the following files to the `./dataset` folder:
-
-```
-trade_data_2019_2023.csv  
-trade_data_deepseek_risk_2019_2023.csv  
-trade_data_deepseek_sentiment_2019_2023.csv  
-train_data_2013_2018.csv  
-train_data_deepseek_risk_2013_2018.csv  
-train_data_deepseek_sentiment_2013_2018.csv
-```
-
-Alternatively, run `download_data.sh` to download the trade data and model for backtesting only.
-This will generate the `./dataset` folder with the following files:
-
-```
-trade_data_deepseek_risk_2019_2023.csv  
-trade_data_deepseek_sentiment_2019_2023.csv  
-```
-
-and the `./checkpoint` folder with the following file:
-
-```
-model_rl.pth
-```
-
-### 🔧 Dataset Preparation from Scratch (Optional)
-
-The base dataset is **FNSPID**:  
+原始資料集 **FNSPID**:  
 - [FNSPID on Hugging Face](https://huggingface.co/datasets/Zihan1004/FNSPID) (see `Stock_news/nasdaq_exteral_data.csv`)  
 - [FNSPID GitHub Repo](https://github.com/Zdong104/FNSPID_Financial_News_Dataset)  
 - [FNSPID Paper (arXiv)](https://arxiv.org/abs/2402.06698)
 
-To add LLM-generated signals, run:
+### 資料處理加入LLM市場訊號
+
+加入LLM產生之市場訊號(情緒、風險):
 - `sentiment_deepseek_deepinfra.py`
 - `risk_deepseek_deepinfra.py`
 
-These scripts generate:
-- [Sentiment Dataset](https://huggingface.co/datasets/benstaf/nasdaq_news_sentiment)
-- [Risk Dataset](https://huggingface.co/datasets/benstaf/risk_nasdaq)
-
-Next, process the combined data using:
+訓練及測試資料整合:
 - `train_trade_data_deepseek_sentiment.py`
 - `train_trade_data_deepseek_risk.py`
 
-This produces agent-ready datasets.
-
----
+完成後將資料放入`./dataset`
 
 
-## 🏋️‍♂️ Training and Environments
 
-To start training, run:
+### Training and Environments
+
+訓練模型指令
 
 ```bash
 python train_dapo_llm_risk.py --adjustment_type both --alpha 1.0 --beta 1.0
 ```
 
-The trained model from this command is available at:  
-👉 [model_rl.pth on Hugging Face](https://huggingface.co/rz2689/finrl-dapo-grpo-sentiment-risk/blob/main/model_rl.pth)
+供參考:使用download_data.bat會一併下載已訓練權重至 `./checkpoint`
+```
+model_rl.pth
+```
 
----
+### Evaluation
 
-## ✅ Evaluation
-
-To evaluate the trained agent, run:
+模型測試指令:
 
 ```bash
 python backtest_main_dapo.py
 ```
+以上內容均參考自:https://github.com/Ruijian-Zha/FinRL-DAPO-SR/tree/main
